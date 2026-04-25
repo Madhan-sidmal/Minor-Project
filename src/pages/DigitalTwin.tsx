@@ -40,6 +40,12 @@ const DigitalTwin = ({ mode = "farmer" }: { mode?: "farmer" | "admin" }) => {
   const [forecasting, setForecasting] = useState(false);
   const [soil, setSoil] = useState<SoilAnalysis | undefined>(undefined);
 
+  // Live re-simulate when soil readings change (e.g. sensor stream)
+  useEffect(() => {
+    if (land) setSim(simulate(land, params, soil));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [soil]);
+
   const handleFile = async (file: File) => {
     if (file.size > 8 * 1024 * 1024) {
       toast.error("Image too large (max 8MB)");
