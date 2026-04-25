@@ -79,7 +79,7 @@ const DigitalTwin = ({ mode = "farmer" }: { mode?: "farmer" | "admin" }) => {
       toast.error("Upload a photo first");
       return;
     }
-    const out = simulate(land, params);
+    const out = simulate(land, params, soil);
     setSim(out);
     setForecasting(true);
     setForecast("");
