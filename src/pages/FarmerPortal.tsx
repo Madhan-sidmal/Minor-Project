@@ -91,6 +91,19 @@ const FarmerPortal = () => {
           </p>
         </div>
 
+        {/* Digital Twin CTA */}
+        <button
+          onClick={() => navigate("/twin")}
+          className="w-full rounded-2xl border border-accent/30 bg-gradient-to-br from-accent/10 to-primary/10 p-4 text-left flex items-center gap-3 hover:border-accent/50 transition-all"
+        >
+          <div className="h-12 w-12 rounded-xl bg-accent/20 flex items-center justify-center text-2xl">🌍</div>
+          <div className="flex-1">
+            <p className="font-semibold text-sm">Digital Twin</p>
+            <p className="text-xs text-muted-foreground">Photograph your land → 3D view & forecast</p>
+          </div>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        </button>
+
         {/* Settings Panel */}
         {showSettings && (
           <div className="rounded-xl border border-border bg-card p-5 space-y-4 animate-in slide-in-from-top-2">
