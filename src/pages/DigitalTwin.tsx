@@ -242,6 +242,7 @@ const DigitalTwin = ({ mode = "farmer" }: { mode?: "farmer" | "admin" }) => {
                 health={sim?.finalHealth ?? land.healthScore}
                 scenario={params.scenario}
                 irrigationLevel={params.irrigationLevel}
+                soilMoisture={soil?.moisture}
               />
             </div>
             <div className="rounded-xl border border-border bg-card p-4 space-y-3">
