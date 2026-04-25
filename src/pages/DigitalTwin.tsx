@@ -318,10 +318,13 @@ const DigitalTwin = ({ mode = "farmer" }: { mode?: "farmer" | "admin" }) => {
 
         {/* Results */}
         {sim && (
-          <div className="grid md:grid-cols-3 gap-3">
+          <div className={`grid gap-3 ${sim.soilScore !== undefined ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
             <StatCard icon={<TrendingUp className="h-4 w-4 text-primary" />} label={L.finalHealth} value={`${sim.finalHealth}`} sub="/100" />
             <StatCard icon={<Sparkles className="h-4 w-4 text-accent" />} label={L.yieldChange} value={`${sim.yieldChangePct > 0 ? "+" : ""}${sim.yieldChangePct}%`} sub="" tone={sim.yieldChangePct >= 0 ? "good" : "bad"} />
             <StatCard icon={<Droplet className="h-4 w-4 text-chart-blue" />} label={L.water} value={`${sim.totalWaterLiters}`} sub="L/m²" />
+            {sim.soilScore !== undefined && (
+              <StatCard icon={<Beaker className="h-4 w-4 text-chart-green" />} label="Soil score" value={`${sim.soilScore}`} sub="/100" tone={sim.soilScore >= 70 ? "good" : sim.soilScore < 50 ? "bad" : undefined} />
+            )}
           </div>
         )}
 
