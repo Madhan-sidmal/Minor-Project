@@ -17,7 +17,7 @@ const CROPS = ["Rice", "Wheat", "Corn", "Sugarcane", "Cotton", "Tomato", "Soybea
 const SCENARIOS: ExperimentParams["scenario"][] = ["normal", "drought", "heatwave", "heavy_rain", "frost"];
 
 const DigitalTwin = ({ mode = "farmer" }: { mode?: "farmer" | "admin" }) => {
-  const { t, language } = useLanguage();
+  const { t, lang: language } = useLanguage();
   const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
 
