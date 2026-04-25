@@ -8,7 +8,7 @@ import { PipelineFlow } from "@/components/PipelineFlow";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useNavigate } from "react-router-dom";
-import { Play, RotateCcw, Zap, Leaf, ArrowLeft } from "lucide-react";
+import { Play, RotateCcw, Zap, Leaf, ArrowLeft, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { translateCrop, translateSoil } from "@/lib/i18n";
@@ -63,6 +63,10 @@ const AdminDashboard = () => {
           </div>
           <div className="flex items-center gap-2">
             <LanguageSwitcher compact />
+            <Button variant="outline" size="sm" onClick={() => navigate("/admin/twin")} className="text-xs">
+              <Sparkles className="h-3 w-3 mr-1" />
+              Digital Twin
+            </Button>
             <span className="text-xs font-mono text-muted-foreground">{t.runs}: {runCount}</span>
             <Button variant={autoRun ? "default" : "outline"} size="sm" onClick={() => setAutoRun(!autoRun)} className="text-xs">
               <Zap className="h-3 w-3 mr-1" />
