@@ -38,6 +38,7 @@ const DigitalTwin = ({ mode = "farmer" }: { mode?: "farmer" | "admin" }) => {
   const [sim, setSim] = useState<SimulationOutput | null>(null);
   const [forecast, setForecast] = useState<string>("");
   const [forecasting, setForecasting] = useState(false);
+  const [soil, setSoil] = useState<SoilAnalysis | undefined>(undefined);
 
   const handleFile = async (file: File) => {
     if (file.size > 8 * 1024 * 1024) {
