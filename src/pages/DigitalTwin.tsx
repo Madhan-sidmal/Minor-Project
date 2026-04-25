@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Upload, Sparkles, Play, Loader2, Camera, AlertTriangle, TrendingUp, Droplet } from "lucide-react";
+import { ArrowLeft, Upload, Sparkles, Play, Loader2, Camera, AlertTriangle, TrendingUp, Droplet, Beaker } from "lucide-react";
 import { useLanguage } from "@/hooks/useLanguage";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { Button } from "@/components/ui/button";
