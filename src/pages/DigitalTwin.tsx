@@ -62,7 +62,7 @@ const DigitalTwin = ({ mode = "farmer" }: { mode?: "farmer" | "admin" }) => {
         }
         toast.success("Land analyzed!");
         // Auto-run baseline sim
-        const out = simulate(data as LandData, params);
+        const out = simulate(data as LandData, params, soil);
         setSim(out);
       } catch (e: any) {
         console.error(e);
