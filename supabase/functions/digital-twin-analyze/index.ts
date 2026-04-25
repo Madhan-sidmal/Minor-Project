@@ -115,7 +115,7 @@ Deno.serve(async (req) => {
     }
 
     if (mode === "forecast") {
-      const { land, params, language } = body;
+      const { land, params, soil, language } = body;
       const langName = language === "hi" ? "Hindi" : language === "kn" ? "Kannada" : "English";
 
       const aiRes = await fetch(AI_URL, {
@@ -129,11 +129,11 @@ Deno.serve(async (req) => {
           messages: [
             {
               role: "system",
-              content: `You are an agronomy advisor. Given digital-twin land data and farmer experiment parameters, produce a concise forecast (under 180 words) in ${langName}. Cover: expected crop health trajectory, yield change %, water usage, top 2 risks, and 1 recommendation. Use markdown with short bullet points and bold key numbers.`,
+              content: `You are an agronomy advisor. Given digital-twin land data, soil analysis, and farmer experiment parameters, produce a concise forecast (under 200 words) in ${langName}. Cover: expected crop health trajectory, yield change %, water usage, soil-specific guidance (pH, NPK, salinity if provided), top 2 risks, and 1 recommendation. Use markdown with short bullet points and bold key numbers.`,
             },
             {
               role: "user",
-              content: `LAND:\n${JSON.stringify(land)}\n\nEXPERIMENT PARAMS:\n${JSON.stringify(params)}`,
+              content: `LAND:\n${JSON.stringify(land)}\n\nSOIL ANALYSIS:\n${soil ? JSON.stringify(soil) : "(none provided)"}\n\nEXPERIMENT PARAMS:\n${JSON.stringify(params)}`,
             },
           ],
         }),

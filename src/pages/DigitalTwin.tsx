@@ -1,6 +1,6 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Upload, Sparkles, Play, Loader2, Camera, AlertTriangle, TrendingUp, Droplet } from "lucide-react";
+import { ArrowLeft, Upload, Sparkles, Play, Loader2, Camera, AlertTriangle, TrendingUp, Droplet, Beaker } from "lucide-react";
 import { useLanguage } from "@/hooks/useLanguage";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { DigitalTwin3D } from "@/components/DigitalTwin3D";
-import { simulate, ExperimentParams, LandData, SimulationOutput } from "@/lib/twin-simulation";
+import { SoilSensorPanel } from "@/components/SoilSensorPanel";
+import { simulate, ExperimentParams, LandData, SimulationOutput, SoilAnalysis } from "@/lib/twin-simulation";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, CartesianGrid, Tooltip, Legend } from "recharts";
 import ReactMarkdown from "react-markdown";
 
@@ -37,6 +38,13 @@ const DigitalTwin = ({ mode = "farmer" }: { mode?: "farmer" | "admin" }) => {
   const [sim, setSim] = useState<SimulationOutput | null>(null);
   const [forecast, setForecast] = useState<string>("");
   const [forecasting, setForecasting] = useState(false);
+  const [soil, setSoil] = useState<SoilAnalysis | undefined>(undefined);
+
+  // Live re-simulate when soil readings change (e.g. sensor stream)
+  useEffect(() => {
+    if (land) setSim(simulate(land, params, soil));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [soil]);
 
   const handleFile = async (file: File) => {
     if (file.size > 8 * 1024 * 1024) {
@@ -60,7 +68,7 @@ const DigitalTwin = ({ mode = "farmer" }: { mode?: "farmer" | "admin" }) => {
         }
         toast.success("Land analyzed!");
         // Auto-run baseline sim
-        const out = simulate(data as LandData, params);
+        const out = simulate(data as LandData, params, soil);
         setSim(out);
       } catch (e: any) {
         console.error(e);
@@ -77,13 +85,13 @@ const DigitalTwin = ({ mode = "farmer" }: { mode?: "farmer" | "admin" }) => {
       toast.error("Upload a photo first");
       return;
     }
-    const out = simulate(land, params);
+    const out = simulate(land, params, soil);
     setSim(out);
     setForecasting(true);
     setForecast("");
     try {
       const { data, error } = await supabase.functions.invoke("digital-twin-analyze", {
-        body: { mode: "forecast", land, params, language },
+        body: { mode: "forecast", land, params, soil, language },
       });
       if (error) throw error;
       if (data.error) throw new Error(data.error);
@@ -234,6 +242,7 @@ const DigitalTwin = ({ mode = "farmer" }: { mode?: "farmer" | "admin" }) => {
                 health={sim?.finalHealth ?? land.healthScore}
                 scenario={params.scenario}
                 irrigationLevel={params.irrigationLevel}
+                soilMoisture={soil?.moisture}
               />
             </div>
             <div className="rounded-xl border border-border bg-card p-4 space-y-3">
@@ -264,6 +273,9 @@ const DigitalTwin = ({ mode = "farmer" }: { mode?: "farmer" | "admin" }) => {
             </div>
           </div>
         )}
+
+        {/* Soil & Sensor input */}
+        {land && <SoilSensorPanel value={soil} onChange={setSoil} />}
 
         {/* Experiment Controls */}
         {land && (
@@ -306,10 +318,13 @@ const DigitalTwin = ({ mode = "farmer" }: { mode?: "farmer" | "admin" }) => {
 
         {/* Results */}
         {sim && (
-          <div className="grid md:grid-cols-3 gap-3">
+          <div className={`grid gap-3 ${sim.soilScore !== undefined ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
             <StatCard icon={<TrendingUp className="h-4 w-4 text-primary" />} label={L.finalHealth} value={`${sim.finalHealth}`} sub="/100" />
             <StatCard icon={<Sparkles className="h-4 w-4 text-accent" />} label={L.yieldChange} value={`${sim.yieldChangePct > 0 ? "+" : ""}${sim.yieldChangePct}%`} sub="" tone={sim.yieldChangePct >= 0 ? "good" : "bad"} />
             <StatCard icon={<Droplet className="h-4 w-4 text-chart-blue" />} label={L.water} value={`${sim.totalWaterLiters}`} sub="L/m²" />
+            {sim.soilScore !== undefined && (
+              <StatCard icon={<Beaker className="h-4 w-4 text-chart-green" />} label="Soil score" value={`${sim.soilScore}`} sub="/100" tone={sim.soilScore >= 70 ? "good" : sim.soilScore < 50 ? "bad" : undefined} />
+            )}
           </div>
         )}
 
