@@ -7,6 +7,7 @@ import { LanguageProvider } from "@/hooks/useLanguage";
 import Index from "./pages/Index.tsx";
 import AdminDashboard from "./pages/AdminDashboard.tsx";
 import FarmerPortal from "./pages/FarmerPortal.tsx";
+import DigitalTwin from "./pages/DigitalTwin.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -22,6 +23,8 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/farmer" element={<FarmerPortal />} />
+            <Route path="/twin" element={<DigitalTwin mode="farmer" />} />
+            <Route path="/admin/twin" element={<DigitalTwin mode="admin" />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
