@@ -274,6 +274,9 @@ const DigitalTwin = ({ mode = "farmer" }: { mode?: "farmer" | "admin" }) => {
           </div>
         )}
 
+        {/* Soil & Sensor input */}
+        {land && <SoilSensorPanel value={soil} onChange={setSoil} />}
+
         {/* Experiment Controls */}
         {land && (
           <div className="rounded-xl border border-border bg-card p-5 space-y-5">
