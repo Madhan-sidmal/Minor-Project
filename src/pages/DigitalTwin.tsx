@@ -85,7 +85,7 @@ const DigitalTwin = ({ mode = "farmer" }: { mode?: "farmer" | "admin" }) => {
     setForecast("");
     try {
       const { data, error } = await supabase.functions.invoke("digital-twin-analyze", {
-        body: { mode: "forecast", land, params, language },
+        body: { mode: "forecast", land, params, soil, language },
       });
       if (error) throw error;
       if (data.error) throw new Error(data.error);
