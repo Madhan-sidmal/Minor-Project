@@ -67,12 +67,23 @@ interface ViewerSettings {
   sunHeight: number;
 }
 
-// Field tile size in world units
-const SIZE = 14;
+// Max scene span (world units). Real-world meters are scaled to fit inside this.
+const SCENE_SPAN = 14;
 // High-res displacement geometry (was 16 — that's why it looked cartoony / blocky)
 const SUB = 220;
 // Source heightmap is 16x16
 const SRC = 16;
+
+// Convert real field dimensions (m) into scene-unit X/Z extents that fit inside SCENE_SPAN
+function sceneExtent(widthM: number, lengthM: number) {
+  const longest = Math.max(widthM, lengthM, 1);
+  const unitPerM = SCENE_SPAN / longest;
+  return {
+    sizeX: widthM * unitPerM,
+    sizeZ: lengthM * unitPerM,
+    unitPerM,
+  };
+}
 
 /* ----------------- procedural noise (deterministic) ----------------- */
 function hash2(x: number, y: number) {
