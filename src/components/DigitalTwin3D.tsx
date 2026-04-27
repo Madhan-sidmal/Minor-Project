@@ -247,7 +247,9 @@ function Terrain({
   irrigationLevel,
   soilMoisture,
   settings,
-}: Props & { settings: ViewerSettings }) {
+  sizeX,
+  sizeZ,
+}: Props & { settings: ViewerSettings; sizeX: number; sizeZ: number }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const wet = (soilMoisture ?? 50) / 100;
 
@@ -258,12 +260,12 @@ function Terrain({
 
   // High-res geometry with bilinear-sampled heightmap + fractal detail
   const geometry = useMemo(() => {
-    const geo = new THREE.PlaneGeometry(SIZE, SIZE, SUB, SUB);
+    const geo = new THREE.PlaneGeometry(sizeX, sizeZ, SUB, SUB);
     const pos = geo.attributes.position;
     const colors: number[] = [];
     for (let i = 0; i < pos.count; i++) {
-      const u = (pos.getX(i) + SIZE / 2) / SIZE;
-      const v = (pos.getY(i) + SIZE / 2) / SIZE;
+      const u = (pos.getX(i) + sizeX / 2) / sizeX;
+      const v = (pos.getY(i) + sizeZ / 2) / sizeZ;
       const macro = sampleHeight(heightmap, u, v); // 0..~1
       // micro detail: rolling field + tilled rows
       const micro =
@@ -278,7 +280,7 @@ function Terrain({
     geo.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
     geo.computeVertexNormals();
     return geo;
-  }, [heightmap, settings.exaggeration]);
+  }, [heightmap, settings.exaggeration, sizeX, sizeZ]);
 
   // crop instances — billboards across high-res surface
   const cropData = useMemo(() => {
@@ -287,8 +289,8 @@ function Terrain({
     for (let i = 0; i < count; i++) {
       const u = Math.random();
       const v = Math.random();
-      const x = (u - 0.5) * SIZE * 0.96;
-      const z = (v - 0.5) * SIZE * 0.96;
+      const x = (u - 0.5) * sizeX * 0.96;
+      const z = (v - 0.5) * sizeZ * 0.96;
       const macro = sampleHeight(heightmap, u, v);
       const micro = fbm(u * 6, v * 6, 4) * 0.18 + Math.sin(v * 60) * 0.012;
       const y = (macro + micro) * settings.exaggeration;
@@ -301,7 +303,7 @@ function Terrain({
       });
     }
     return arr;
-  }, [heightmap, vegetationDensity, settings.exaggeration]);
+  }, [heightmap, vegetationDensity, settings.exaggeration, sizeX, sizeZ]);
 
   const cropTex = useMemo(() => {
     const h = Math.max(0, Math.min(100, health));
@@ -335,11 +337,15 @@ function Terrain({
     );
   });
 
+  // Largest field axis (used for surrounding-plane / sprinkler offsets)
+  const span = Math.max(sizeX, sizeZ);
+  const sprinklerOffset = span * 0.21;
+
   return (
     <group>
       {/* Surrounding ground plane so field doesn't look like a floating slab */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} receiveShadow>
-        <planeGeometry args={[SIZE * 8, SIZE * 8]} />
+        <planeGeometry args={[span * 8, span * 8]} />
         <meshStandardMaterial color="#3d4a32" roughness={0.95} />
       </mesh>
 
@@ -374,7 +380,7 @@ function Terrain({
       {/* Wet sheen */}
       {wet > 0.7 && !settings.wireframe && (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, 0]}>
-          <planeGeometry args={[SIZE * 0.98, SIZE * 0.98]} />
+          <planeGeometry args={[sizeX * 0.98, sizeZ * 0.98]} />
           <meshPhysicalMaterial
             color="#2c4e63"
             transparent
@@ -421,19 +427,19 @@ function Terrain({
       {/* Rain */}
       {settings.showRain &&
         scenario === "heavy_rain" &&
-        Array.from({ length: 220 }).map((_, i) => <RainDrop key={i} />)}
+        Array.from({ length: 220 }).map((_, i) => <RainDrop key={i} span={span} />)}
 
       {/* Frost speckles */}
       {scenario === "frost" &&
-        Array.from({ length: 60 }).map((_, i) => <FrostFleck key={i} />)}
+        Array.from({ length: 60 }).map((_, i) => <FrostFleck key={i} sizeX={sizeX} sizeZ={sizeZ} />)}
 
-      {/* Sprinklers */}
+      {/* Sprinklers — placed at field corners */}
       {settings.showSprinklers && irrigationLevel > 30 && (
         <>
-          <Sprinkler position={[-3, 0, -3]} intensity={irrigationLevel / 100} />
-          <Sprinkler position={[3, 0, 3]} intensity={irrigationLevel / 100} />
-          <Sprinkler position={[-3, 0, 3]} intensity={irrigationLevel / 100} />
-          <Sprinkler position={[3, 0, -3]} intensity={irrigationLevel / 100} />
+          <Sprinkler position={[-sprinklerOffset, 0, -sprinklerOffset]} intensity={irrigationLevel / 100} />
+          <Sprinkler position={[sprinklerOffset, 0, sprinklerOffset]} intensity={irrigationLevel / 100} />
+          <Sprinkler position={[-sprinklerOffset, 0, sprinklerOffset]} intensity={irrigationLevel / 100} />
+          <Sprinkler position={[sprinklerOffset, 0, -sprinklerOffset]} intensity={irrigationLevel / 100} />
         </>
       )}
     </group>
