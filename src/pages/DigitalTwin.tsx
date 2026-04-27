@@ -282,6 +282,15 @@ const DigitalTwin = ({ mode = "farmer" }: { mode?: "farmer" | "admin" }) => {
           </div>
         )}
 
+        {/* Farm scale calibration */}
+        {land && (
+          <FieldCalibrationPanel
+            value={calibration}
+            onChange={setCalibration}
+            areaEstimateSqm={land.areaEstimateSqm}
+          />
+        )}
+
         {/* Soil & Sensor input */}
         {land && <SoilSensorPanel value={soil} onChange={setSoil} />}
 
