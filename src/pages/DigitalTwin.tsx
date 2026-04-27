@@ -250,6 +250,7 @@ const DigitalTwin = ({ mode = "farmer" }: { mode?: "farmer" | "admin" }) => {
                 scenario={params.scenario}
                 irrigationLevel={params.irrigationLevel}
                 soilMoisture={soil?.moisture}
+                scale={calibration}
               />
             </div>
             <div className="rounded-xl border border-border bg-card p-4 space-y-3">
