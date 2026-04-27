@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { DigitalTwin3D } from "@/components/DigitalTwin3D";
 import { SoilSensorPanel } from "@/components/SoilSensorPanel";
+import { FieldCalibrationPanel, FieldCalibration, DEFAULT_CALIBRATION } from "@/components/FieldCalibrationPanel";
 import { simulate, ExperimentParams, LandData, SimulationOutput, SoilAnalysis } from "@/lib/twin-simulation";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, CartesianGrid, Tooltip, Legend } from "recharts";
 import ReactMarkdown from "react-markdown";
