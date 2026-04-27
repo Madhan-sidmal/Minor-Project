@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { DigitalTwin3D } from "@/components/DigitalTwin3D";
 import { SoilSensorPanel } from "@/components/SoilSensorPanel";
+import { FieldCalibrationPanel, FieldCalibration, DEFAULT_CALIBRATION } from "@/components/FieldCalibrationPanel";
 import { simulate, ExperimentParams, LandData, SimulationOutput, SoilAnalysis } from "@/lib/twin-simulation";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, CartesianGrid, Tooltip, Legend } from "recharts";
 import ReactMarkdown from "react-markdown";
@@ -39,6 +40,7 @@ const DigitalTwin = ({ mode = "farmer" }: { mode?: "farmer" | "admin" }) => {
   const [forecast, setForecast] = useState<string>("");
   const [forecasting, setForecasting] = useState(false);
   const [soil, setSoil] = useState<SoilAnalysis | undefined>(undefined);
+  const [calibration, setCalibration] = useState<FieldCalibration>(DEFAULT_CALIBRATION);
 
   // Live re-simulate when soil readings change (e.g. sensor stream)
   useEffect(() => {
@@ -65,6 +67,11 @@ const DigitalTwin = ({ mode = "farmer" }: { mode?: "farmer" | "admin" }) => {
         setLand(data as LandData);
         if (data.cropGuess && CROPS.includes(data.cropGuess)) {
           setParams((p) => ({ ...p, crop: data.cropGuess }));
+        }
+        // Seed field calibration from AI area estimate (assume square if no aspect known)
+        if (data.areaEstimateSqm && data.areaEstimateSqm > 4) {
+          const side = Math.round(Math.sqrt(data.areaEstimateSqm));
+          setCalibration((c) => ({ ...c, widthM: side, lengthM: side }));
         }
         toast.success("Land analyzed!");
         // Auto-run baseline sim
@@ -243,6 +250,7 @@ const DigitalTwin = ({ mode = "farmer" }: { mode?: "farmer" | "admin" }) => {
                 scenario={params.scenario}
                 irrigationLevel={params.irrigationLevel}
                 soilMoisture={soil?.moisture}
+                scale={calibration}
               />
             </div>
             <div className="rounded-xl border border-border bg-card p-4 space-y-3">
@@ -272,6 +280,15 @@ const DigitalTwin = ({ mode = "farmer" }: { mode?: "farmer" | "admin" }) => {
               />
             </div>
           </div>
+        )}
+
+        {/* Farm scale calibration */}
+        {land && (
+          <FieldCalibrationPanel
+            value={calibration}
+            onChange={setCalibration}
+            areaEstimateSqm={land.areaEstimateSqm}
+          />
         )}
 
         {/* Soil & Sensor input */}

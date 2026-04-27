@@ -33,6 +33,14 @@ import {
   Grid3x3,
 } from "lucide-react";
 
+export interface FieldScale {
+  widthM: number;        // X dimension of the real field (m)
+  lengthM: number;       // Z dimension of the real field (m)
+  cameraHeightM: number; // capturing camera height above ground (m)
+  cameraFovDeg: number;  // capturing camera horizontal FOV (deg)
+  tiltDeg: number;       // tilt below horizontal (deg, 0=level, 90=nadir)
+}
+
 interface Props {
   heightmap: number[]; // 256 (16x16) — input low-res, we upsample
   vegetationDensity: number;
@@ -41,6 +49,7 @@ interface Props {
   scenario: "normal" | "drought" | "heatwave" | "heavy_rain" | "frost";
   irrigationLevel: number; // 0-100
   soilMoisture?: number; // 0-100
+  scale?: FieldScale;     // real-world calibration
 }
 
 interface ViewerSettings {
@@ -58,12 +67,23 @@ interface ViewerSettings {
   sunHeight: number;
 }
 
-// Field tile size in world units
-const SIZE = 14;
+// Max scene span (world units). Real-world meters are scaled to fit inside this.
+const SCENE_SPAN = 14;
 // High-res displacement geometry (was 16 — that's why it looked cartoony / blocky)
 const SUB = 220;
 // Source heightmap is 16x16
 const SRC = 16;
+
+// Convert real field dimensions (m) into scene-unit X/Z extents that fit inside SCENE_SPAN
+function sceneExtent(widthM: number, lengthM: number) {
+  const longest = Math.max(widthM, lengthM, 1);
+  const unitPerM = SCENE_SPAN / longest;
+  return {
+    sizeX: widthM * unitPerM,
+    sizeZ: lengthM * unitPerM,
+    unitPerM,
+  };
+}
 
 /* ----------------- procedural noise (deterministic) ----------------- */
 function hash2(x: number, y: number) {
@@ -227,7 +247,9 @@ function Terrain({
   irrigationLevel,
   soilMoisture,
   settings,
-}: Props & { settings: ViewerSettings }) {
+  sizeX,
+  sizeZ,
+}: Props & { settings: ViewerSettings; sizeX: number; sizeZ: number }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const wet = (soilMoisture ?? 50) / 100;
 
@@ -238,12 +260,12 @@ function Terrain({
 
   // High-res geometry with bilinear-sampled heightmap + fractal detail
   const geometry = useMemo(() => {
-    const geo = new THREE.PlaneGeometry(SIZE, SIZE, SUB, SUB);
+    const geo = new THREE.PlaneGeometry(sizeX, sizeZ, SUB, SUB);
     const pos = geo.attributes.position;
     const colors: number[] = [];
     for (let i = 0; i < pos.count; i++) {
-      const u = (pos.getX(i) + SIZE / 2) / SIZE;
-      const v = (pos.getY(i) + SIZE / 2) / SIZE;
+      const u = (pos.getX(i) + sizeX / 2) / sizeX;
+      const v = (pos.getY(i) + sizeZ / 2) / sizeZ;
       const macro = sampleHeight(heightmap, u, v); // 0..~1
       // micro detail: rolling field + tilled rows
       const micro =
@@ -258,7 +280,7 @@ function Terrain({
     geo.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
     geo.computeVertexNormals();
     return geo;
-  }, [heightmap, settings.exaggeration]);
+  }, [heightmap, settings.exaggeration, sizeX, sizeZ]);
 
   // crop instances — billboards across high-res surface
   const cropData = useMemo(() => {
@@ -267,8 +289,8 @@ function Terrain({
     for (let i = 0; i < count; i++) {
       const u = Math.random();
       const v = Math.random();
-      const x = (u - 0.5) * SIZE * 0.96;
-      const z = (v - 0.5) * SIZE * 0.96;
+      const x = (u - 0.5) * sizeX * 0.96;
+      const z = (v - 0.5) * sizeZ * 0.96;
       const macro = sampleHeight(heightmap, u, v);
       const micro = fbm(u * 6, v * 6, 4) * 0.18 + Math.sin(v * 60) * 0.012;
       const y = (macro + micro) * settings.exaggeration;
@@ -281,7 +303,7 @@ function Terrain({
       });
     }
     return arr;
-  }, [heightmap, vegetationDensity, settings.exaggeration]);
+  }, [heightmap, vegetationDensity, settings.exaggeration, sizeX, sizeZ]);
 
   const cropTex = useMemo(() => {
     const h = Math.max(0, Math.min(100, health));
@@ -315,11 +337,15 @@ function Terrain({
     );
   });
 
+  // Largest field axis (used for surrounding-plane / sprinkler offsets)
+  const span = Math.max(sizeX, sizeZ);
+  const sprinklerOffset = span * 0.21;
+
   return (
     <group>
       {/* Surrounding ground plane so field doesn't look like a floating slab */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} receiveShadow>
-        <planeGeometry args={[SIZE * 8, SIZE * 8]} />
+        <planeGeometry args={[span * 8, span * 8]} />
         <meshStandardMaterial color="#3d4a32" roughness={0.95} />
       </mesh>
 
@@ -354,7 +380,7 @@ function Terrain({
       {/* Wet sheen */}
       {wet > 0.7 && !settings.wireframe && (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, 0]}>
-          <planeGeometry args={[SIZE * 0.98, SIZE * 0.98]} />
+          <planeGeometry args={[sizeX * 0.98, sizeZ * 0.98]} />
           <meshPhysicalMaterial
             color="#2c4e63"
             transparent
@@ -401,35 +427,35 @@ function Terrain({
       {/* Rain */}
       {settings.showRain &&
         scenario === "heavy_rain" &&
-        Array.from({ length: 220 }).map((_, i) => <RainDrop key={i} />)}
+        Array.from({ length: 220 }).map((_, i) => <RainDrop key={i} span={span} />)}
 
       {/* Frost speckles */}
       {scenario === "frost" &&
-        Array.from({ length: 60 }).map((_, i) => <FrostFleck key={i} />)}
+        Array.from({ length: 60 }).map((_, i) => <FrostFleck key={i} sizeX={sizeX} sizeZ={sizeZ} />)}
 
-      {/* Sprinklers */}
+      {/* Sprinklers — placed at field corners */}
       {settings.showSprinklers && irrigationLevel > 30 && (
         <>
-          <Sprinkler position={[-3, 0, -3]} intensity={irrigationLevel / 100} />
-          <Sprinkler position={[3, 0, 3]} intensity={irrigationLevel / 100} />
-          <Sprinkler position={[-3, 0, 3]} intensity={irrigationLevel / 100} />
-          <Sprinkler position={[3, 0, -3]} intensity={irrigationLevel / 100} />
+          <Sprinkler position={[-sprinklerOffset, 0, -sprinklerOffset]} intensity={irrigationLevel / 100} />
+          <Sprinkler position={[sprinklerOffset, 0, sprinklerOffset]} intensity={irrigationLevel / 100} />
+          <Sprinkler position={[-sprinklerOffset, 0, sprinklerOffset]} intensity={irrigationLevel / 100} />
+          <Sprinkler position={[sprinklerOffset, 0, -sprinklerOffset]} intensity={irrigationLevel / 100} />
         </>
       )}
     </group>
   );
 }
 
-function RainDrop() {
+function RainDrop({ span }: { span: number }) {
   const ref = useRef<THREE.Mesh>(null);
   const start = useMemo(
     () => ({
-      x: (Math.random() - 0.5) * SIZE,
-      z: (Math.random() - 0.5) * SIZE,
+      x: (Math.random() - 0.5) * span,
+      z: (Math.random() - 0.5) * span,
       y: 8 + Math.random() * 6,
       speed: 0.22 + Math.random() * 0.18,
     }),
-    [],
+    [span],
   );
   useFrame(() => {
     if (!ref.current) return;
@@ -444,15 +470,15 @@ function RainDrop() {
   );
 }
 
-function FrostFleck() {
+function FrostFleck({ sizeX, sizeZ }: { sizeX: number; sizeZ: number }) {
   const pos = useMemo(
     () =>
       [
-        (Math.random() - 0.5) * SIZE * 0.95,
+        (Math.random() - 0.5) * sizeX * 0.95,
         0.025,
-        (Math.random() - 0.5) * SIZE * 0.95,
+        (Math.random() - 0.5) * sizeZ * 0.95,
       ] as [number, number, number],
-    [],
+    [sizeX, sizeZ],
   );
   return (
     <mesh position={pos} rotation={[-Math.PI / 2, 0, 0]}>
@@ -616,6 +642,24 @@ export const DigitalTwin3D = (props: Props) => {
     return [Math.cos(rad) * 100, 25 + settings.sunHeight * 80, Math.sin(rad) * 100];
   }, [settings.sunAngle, settings.sunHeight]);
 
+  // ----- real-world calibration → scene units -----
+  const { sizeX, sizeZ, unitPerM } = useMemo(() => {
+    const w = props.scale?.widthM ?? 50;
+    const l = props.scale?.lengthM ?? 50;
+    return sceneExtent(w, l);
+  }, [props.scale?.widthM, props.scale?.lengthM]);
+  const span = Math.max(sizeX, sizeZ);
+
+  // Camera position derived from capture geometry (height + tilt) — scaled to scene units
+  const cameraInit = useMemo<{ position: [number, number, number]; fov: number }>(() => {
+    const h = (props.scale?.cameraHeightM ?? 1.6) * unitPerM;
+    const fov = props.scale?.cameraFovDeg ?? 38;
+    const tilt = ((props.scale?.tiltDeg ?? 25) * Math.PI) / 180;
+    // place camera back from field edge proportional to height & tilt so the field is framed
+    const back = Math.max(span * 0.6, h / Math.tan(Math.max(0.1, tilt)));
+    return { position: [back, Math.max(h, span * 0.4), back], fov: Math.max(20, Math.min(110, fov)) };
+  }, [props.scale, unitPerM, span]);
+
   useEffect(() => {
     const onChange = () => setFullscreen(!!document.fullscreenElement);
     document.addEventListener("fullscreenchange", onChange);
@@ -638,7 +682,8 @@ export const DigitalTwin3D = (props: Props) => {
     >
       <Canvas
         shadows
-        camera={{ position: [12, 8, 12], fov: 38 }}
+        camera={{ position: cameraInit.position, fov: cameraInit.fov }}
+        key={`cam-${cameraInit.position.join(",")}-${cameraInit.fov}`}
         gl={{
           preserveDrawingBuffer: true,
           antialias: true,
@@ -702,12 +747,12 @@ export const DigitalTwin3D = (props: Props) => {
           </Clouds>
         )}
 
-        <Terrain {...props} settings={settings} />
+        <Terrain {...props} settings={settings} sizeX={sizeX} sizeZ={sizeZ} />
 
         <ContactShadows
           position={[0, 0.005, 0]}
           opacity={0.55}
-          scale={SIZE * 1.4}
+          scale={span * 1.4}
           blur={2.4}
           far={8}
           color="#000000"
@@ -715,7 +760,7 @@ export const DigitalTwin3D = (props: Props) => {
 
         {settings.showGrid && (
           <Grid
-            args={[SIZE * 1.5, SIZE * 1.5]}
+            args={[span * 1.5, span * 1.5]}
             cellSize={0.5}
             cellThickness={0.6}
             cellColor="#6b7c6b"
