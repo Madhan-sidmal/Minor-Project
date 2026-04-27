@@ -682,7 +682,8 @@ export const DigitalTwin3D = (props: Props) => {
     >
       <Canvas
         shadows
-        camera={{ position: [12, 8, 12], fov: 38 }}
+        camera={{ position: cameraInit.position, fov: cameraInit.fov }}
+        key={`cam-${cameraInit.position.join(",")}-${cameraInit.fov}`}
         gl={{
           preserveDrawingBuffer: true,
           antialias: true,
