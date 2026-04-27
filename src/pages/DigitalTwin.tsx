@@ -40,6 +40,7 @@ const DigitalTwin = ({ mode = "farmer" }: { mode?: "farmer" | "admin" }) => {
   const [forecast, setForecast] = useState<string>("");
   const [forecasting, setForecasting] = useState(false);
   const [soil, setSoil] = useState<SoilAnalysis | undefined>(undefined);
+  const [calibration, setCalibration] = useState<FieldCalibration>(DEFAULT_CALIBRATION);
 
   // Live re-simulate when soil readings change (e.g. sensor stream)
   useEffect(() => {
