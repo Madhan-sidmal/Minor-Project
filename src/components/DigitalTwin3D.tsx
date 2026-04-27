@@ -642,6 +642,24 @@ export const DigitalTwin3D = (props: Props) => {
     return [Math.cos(rad) * 100, 25 + settings.sunHeight * 80, Math.sin(rad) * 100];
   }, [settings.sunAngle, settings.sunHeight]);
 
+  // ----- real-world calibration → scene units -----
+  const { sizeX, sizeZ, unitPerM } = useMemo(() => {
+    const w = props.scale?.widthM ?? 50;
+    const l = props.scale?.lengthM ?? 50;
+    return sceneExtent(w, l);
+  }, [props.scale?.widthM, props.scale?.lengthM]);
+  const span = Math.max(sizeX, sizeZ);
+
+  // Camera position derived from capture geometry (height + tilt) — scaled to scene units
+  const cameraInit = useMemo<{ position: [number, number, number]; fov: number }>(() => {
+    const h = (props.scale?.cameraHeightM ?? 1.6) * unitPerM;
+    const fov = props.scale?.cameraFovDeg ?? 38;
+    const tilt = ((props.scale?.tiltDeg ?? 25) * Math.PI) / 180;
+    // place camera back from field edge proportional to height & tilt so the field is framed
+    const back = Math.max(span * 0.6, h / Math.tan(Math.max(0.1, tilt)));
+    return { position: [back, Math.max(h, span * 0.4), back], fov: Math.max(20, Math.min(110, fov)) };
+  }, [props.scale, unitPerM, span]);
+
   useEffect(() => {
     const onChange = () => setFullscreen(!!document.fullscreenElement);
     document.addEventListener("fullscreenchange", onChange);
