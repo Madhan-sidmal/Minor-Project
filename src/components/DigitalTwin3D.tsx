@@ -33,6 +33,14 @@ import {
   Grid3x3,
 } from "lucide-react";
 
+export interface FieldScale {
+  widthM: number;        // X dimension of the real field (m)
+  lengthM: number;       // Z dimension of the real field (m)
+  cameraHeightM: number; // capturing camera height above ground (m)
+  cameraFovDeg: number;  // capturing camera horizontal FOV (deg)
+  tiltDeg: number;       // tilt below horizontal (deg, 0=level, 90=nadir)
+}
+
 interface Props {
   heightmap: number[]; // 256 (16x16) — input low-res, we upsample
   vegetationDensity: number;
@@ -41,6 +49,7 @@ interface Props {
   scenario: "normal" | "drought" | "heatwave" | "heavy_rain" | "frost";
   irrigationLevel: number; // 0-100
   soilMoisture?: number; // 0-100
+  scale?: FieldScale;     // real-world calibration
 }
 
 interface ViewerSettings {
