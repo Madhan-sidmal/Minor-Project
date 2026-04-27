@@ -446,16 +446,16 @@ function Terrain({
   );
 }
 
-function RainDrop() {
+function RainDrop({ span }: { span: number }) {
   const ref = useRef<THREE.Mesh>(null);
   const start = useMemo(
     () => ({
-      x: (Math.random() - 0.5) * SIZE,
-      z: (Math.random() - 0.5) * SIZE,
+      x: (Math.random() - 0.5) * span,
+      z: (Math.random() - 0.5) * span,
       y: 8 + Math.random() * 6,
       speed: 0.22 + Math.random() * 0.18,
     }),
-    [],
+    [span],
   );
   useFrame(() => {
     if (!ref.current) return;
@@ -470,15 +470,15 @@ function RainDrop() {
   );
 }
 
-function FrostFleck() {
+function FrostFleck({ sizeX, sizeZ }: { sizeX: number; sizeZ: number }) {
   const pos = useMemo(
     () =>
       [
-        (Math.random() - 0.5) * SIZE * 0.95,
+        (Math.random() - 0.5) * sizeX * 0.95,
         0.025,
-        (Math.random() - 0.5) * SIZE * 0.95,
+        (Math.random() - 0.5) * sizeZ * 0.95,
       ] as [number, number, number],
-    [],
+    [sizeX, sizeZ],
   );
   return (
     <mesh position={pos} rotation={[-Math.PI / 2, 0, 0]}>
