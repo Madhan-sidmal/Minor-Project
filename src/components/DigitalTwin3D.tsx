@@ -1,6 +1,19 @@
 import { useMemo, useRef, useState, useImperativeHandle, forwardRef, useEffect } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { OrbitControls, Grid, Sky, Cloud, Clouds, ContactShadows, Environment } from "@react-three/drei";
+import {
+  OrbitControls,
+  Grid,
+  Sky,
+  Cloud,
+  Clouds,
+  ContactShadows,
+  Environment,
+  Instances,
+  Instance,
+  SoftShadows,
+} from "@react-three/drei";
+import { EffectComposer, Bloom, SSAO, Vignette, BrightnessContrast, ToneMapping } from "@react-three/postprocessing";
+import { BlendFunction, ToneMappingMode } from "postprocessing";
 import * as THREE from "three";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -21,13 +34,13 @@ import {
 } from "lucide-react";
 
 interface Props {
-  heightmap: number[]; // 256 (16x16)
+  heightmap: number[]; // 256 (16x16) — input low-res, we upsample
   vegetationDensity: number;
   soilColor: string;
   health: number; // 0-100, drives crop color
   scenario: "normal" | "drought" | "heatwave" | "heavy_rain" | "frost";
   irrigationLevel: number; // 0-100
-  soilMoisture?: number; // 0-100, from sensor — darkens soil, hint of wetness
+  soilMoisture?: number; // 0-100
 }
 
 interface ViewerSettings {
@@ -41,24 +54,170 @@ interface ViewerSettings {
   autoRotate: boolean;
   showClouds: boolean;
   showSky: boolean;
-  sunAngle: number; // 0-360
-  sunHeight: number; // 0.05-1
+  sunAngle: number;
+  sunHeight: number;
 }
 
-const GRID = 16;
-const SIZE = 10;
+// Field tile size in world units
+const SIZE = 14;
+// High-res displacement geometry (was 16 — that's why it looked cartoony / blocky)
+const SUB = 220;
+// Source heightmap is 16x16
+const SRC = 16;
 
-function darkenHex(hex: string, amount: number): string {
-  // amount 0..1, 1 = full black
-  try {
-    const c = new THREE.Color(hex);
-    c.lerp(new THREE.Color("#1a1410"), Math.max(0, Math.min(0.6, amount)));
-    return `#${c.getHexString()}`;
-  } catch {
-    return hex;
+/* ----------------- procedural noise (deterministic) ----------------- */
+function hash2(x: number, y: number) {
+  const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+  return s - Math.floor(s);
+}
+function vnoise(x: number, y: number) {
+  const xi = Math.floor(x);
+  const yi = Math.floor(y);
+  const xf = x - xi;
+  const yf = y - yi;
+  const u = xf * xf * (3 - 2 * xf);
+  const v = yf * yf * (3 - 2 * yf);
+  const a = hash2(xi, yi);
+  const b = hash2(xi + 1, yi);
+  const c = hash2(xi, yi + 1);
+  const d = hash2(xi + 1, yi + 1);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+function fbm(x: number, y: number, oct = 5) {
+  let amp = 0.5;
+  let freq = 1.0;
+  let sum = 0;
+  for (let i = 0; i < oct; i++) {
+    sum += amp * vnoise(x * freq, y * freq);
+    freq *= 2.0;
+    amp *= 0.5;
   }
+  return sum;
 }
 
+/* ----------------- bilinear sample of source heightmap ----------------- */
+function sampleHeight(hm: number[], u: number, v: number) {
+  const x = u * (SRC - 1);
+  const y = v * (SRC - 1);
+  const x0 = Math.floor(x);
+  const y0 = Math.floor(y);
+  const x1 = Math.min(SRC - 1, x0 + 1);
+  const y1 = Math.min(SRC - 1, y0 + 1);
+  const fx = x - x0;
+  const fy = y - y0;
+  const a = hm[y0 * SRC + x0] ?? 0;
+  const b = hm[y0 * SRC + x1] ?? 0;
+  const c = hm[y1 * SRC + x0] ?? 0;
+  const d = hm[y1 * SRC + x1] ?? 0;
+  return a * (1 - fx) * (1 - fy) + b * fx * (1 - fy) + c * (1 - fx) * fy + d * fx * fy;
+}
+
+/* ----------------- canvas-based soil albedo + normal textures ----------------- */
+function makeSoilTextures(baseHex: string, wet: number) {
+  const size = 1024;
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const ctx = c.getContext("2d")!;
+  // base
+  const base = new THREE.Color(baseHex);
+  base.lerp(new THREE.Color("#1f1812"), Math.min(0.55, wet * 0.55));
+  ctx.fillStyle = `#${base.getHexString()}`;
+  ctx.fillRect(0, 0, size, size);
+  // grain speckles
+  const img = ctx.getImageData(0, 0, size, size);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const n = (Math.random() - 0.5) * 38;
+    img.data[i] = Math.max(0, Math.min(255, img.data[i] + n));
+    img.data[i + 1] = Math.max(0, Math.min(255, img.data[i + 1] + n * 0.9));
+    img.data[i + 2] = Math.max(0, Math.min(255, img.data[i + 2] + n * 0.8));
+  }
+  ctx.putImageData(img, 0, 0);
+  // tilled rows (subtle stripes giving plowed-field look)
+  ctx.globalAlpha = 0.18;
+  for (let y = 0; y < size; y += 14) {
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.fillRect(0, y, size, 1);
+    ctx.fillStyle = "rgba(255,255,255,0.25)";
+    ctx.fillRect(0, y + 2, size, 1);
+  }
+  ctx.globalAlpha = 1;
+  // dark patches (clods / wet spots)
+  for (let i = 0; i < 380; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = 8 + Math.random() * 32;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(0,0,0,${0.18 + Math.random() * 0.18})`);
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const albedo = new THREE.CanvasTexture(c);
+  albedo.wrapS = albedo.wrapT = THREE.RepeatWrapping;
+  albedo.repeat.set(6, 6);
+  albedo.anisotropy = 8;
+  albedo.colorSpace = THREE.SRGBColorSpace;
+
+  // normal map from grayscale of grain
+  const nc = document.createElement("canvas");
+  nc.width = nc.height = size;
+  const nctx = nc.getContext("2d")!;
+  const gimg = nctx.createImageData(size, size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const v = (Math.sin(x * 0.4) + Math.cos(y * 0.35) + Math.random() * 1.6) * 0.25 + 0.5;
+      const idx = (y * size + x) * 4;
+      const nx = (Math.random() - 0.5) * 0.6 + 0.5;
+      const ny = (Math.random() - 0.5) * 0.6 + 0.5;
+      gimg.data[idx] = nx * 255;
+      gimg.data[idx + 1] = ny * 255;
+      gimg.data[idx + 2] = 255 * v;
+      gimg.data[idx + 3] = 255;
+    }
+  }
+  nctx.putImageData(gimg, 0, 0);
+  const normal = new THREE.CanvasTexture(nc);
+  normal.wrapS = normal.wrapT = THREE.RepeatWrapping;
+  normal.repeat.set(6, 6);
+  normal.anisotropy = 8;
+
+  return { albedo, normal };
+}
+
+/* ----------------- crop blade billboard texture ----------------- */
+function makeBladeTexture(tipHex: string, baseHex: string) {
+  const w = 64;
+  const h = 256;
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext("2d")!;
+  ctx.clearRect(0, 0, w, h);
+  // draw a few pointed blades
+  for (let i = 0; i < 5; i++) {
+    const x = 8 + i * 12 + (Math.random() - 0.5) * 4;
+    const sway = (Math.random() - 0.5) * 6;
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, tipHex);
+    grad.addColorStop(0.6, baseHex);
+    grad.addColorStop(1, baseHex);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(x - 2, h);
+    ctx.quadraticCurveTo(x + sway, h / 2, x, 0);
+    ctx.quadraticCurveTo(x + sway + 1, h / 2, x + 2, h);
+    ctx.closePath();
+    ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  return tex;
+}
+
+/* ----------------- Terrain ----------------- */
 function Terrain({
   heightmap,
   soilColor,
@@ -70,62 +229,74 @@ function Terrain({
   settings,
 }: Props & { settings: ViewerSettings }) {
   const meshRef = useRef<THREE.Mesh>(null);
+  const wet = (soilMoisture ?? 50) / 100;
 
+  const { albedo, normal } = useMemo(
+    () => makeSoilTextures(soilColor || "#8b6f47", wet),
+    [soilColor, wet],
+  );
+
+  // High-res geometry with bilinear-sampled heightmap + fractal detail
   const geometry = useMemo(() => {
-    const geo = new THREE.PlaneGeometry(SIZE, SIZE, GRID - 1, GRID - 1);
+    const geo = new THREE.PlaneGeometry(SIZE, SIZE, SUB, SUB);
     const pos = geo.attributes.position;
     const colors: number[] = [];
     for (let i = 0; i < pos.count; i++) {
-      const h = heightmap[i] ?? 0;
-      pos.setZ(i, h * settings.exaggeration);
-      const t = Math.max(0, Math.min(1, h));
-      const r = t;
-      const g = 1 - Math.abs(t - 0.5) * 2;
-      const b = 1 - t;
-      colors.push(r, g, b);
+      const u = (pos.getX(i) + SIZE / 2) / SIZE;
+      const v = (pos.getY(i) + SIZE / 2) / SIZE;
+      const macro = sampleHeight(heightmap, u, v); // 0..~1
+      // micro detail: rolling field + tilled rows
+      const micro =
+        fbm(u * 6, v * 6, 4) * 0.18 +
+        Math.sin(v * 60) * 0.012 + // furrow rows
+        (vnoise(u * 30, v * 30) - 0.5) * 0.04;
+      const z = macro * settings.exaggeration + micro * settings.exaggeration;
+      pos.setZ(i, z);
+      const t = Math.max(0, Math.min(1, macro));
+      colors.push(t, 1 - Math.abs(t - 0.5) * 2, 1 - t);
     }
     geo.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
     geo.computeVertexNormals();
     return geo;
   }, [heightmap, settings.exaggeration]);
 
-  // Wet soil = darker, slightly bluer
-  const effectiveSoilColor = useMemo(() => {
-    const wet = (soilMoisture ?? 50) / 100;
-    return darkenHex(soilColor || "#8b6f47", wet * 0.5);
-  }, [soilColor, soilMoisture]);
-
-  // Crop instances — multi-part bushes for richer look
-  const cropPositions = useMemo(() => {
-    const arr: { x: number; y: number; z: number; scale: number; jitter: number }[] = [];
-    const count = Math.floor(80 + vegetationDensity * 280);
+  // crop instances — billboards across high-res surface
+  const cropData = useMemo(() => {
+    const arr: { x: number; y: number; z: number; rot: number; scale: number }[] = [];
+    const count = Math.floor(220 + vegetationDensity * 1400);
     for (let i = 0; i < count; i++) {
-      const gx = Math.floor(Math.random() * GRID);
-      const gz = Math.floor(Math.random() * GRID);
-      const idx = gz * GRID + gx;
-      const h = (heightmap[idx] ?? 0) * settings.exaggeration;
-      const x = (gx / (GRID - 1) - 0.5) * SIZE + (Math.random() - 0.5) * 0.5;
-      const z = (gz / (GRID - 1) - 0.5) * SIZE + (Math.random() - 0.5) * 0.5;
-      arr.push({ x, y: h, z, scale: 0.55 + Math.random() * 0.55, jitter: Math.random() });
+      const u = Math.random();
+      const v = Math.random();
+      const x = (u - 0.5) * SIZE * 0.96;
+      const z = (v - 0.5) * SIZE * 0.96;
+      const macro = sampleHeight(heightmap, u, v);
+      const micro = fbm(u * 6, v * 6, 4) * 0.18 + Math.sin(v * 60) * 0.012;
+      const y = (macro + micro) * settings.exaggeration;
+      arr.push({
+        x,
+        y,
+        z,
+        rot: Math.random() * Math.PI,
+        scale: 0.35 + Math.random() * 0.55,
+      });
     }
     return arr;
   }, [heightmap, vegetationDensity, settings.exaggeration]);
 
-  const cropColors = useMemo(() => {
+  const cropTex = useMemo(() => {
     const h = Math.max(0, Math.min(100, health));
-    let base: THREE.Color;
-    let tip: THREE.Color;
+    let baseHex: string, tipHex: string;
     if (h < 35) {
-      base = new THREE.Color("#7a5a22");
-      tip = new THREE.Color("#a08344");
+      baseHex = "#6b521e";
+      tipHex = "#a08344";
     } else if (h < 65) {
-      base = new THREE.Color("#9a8a2a");
-      tip = new THREE.Color("#d6c64a");
+      baseHex = "#7a7028";
+      tipHex = "#c5b540";
     } else {
-      base = new THREE.Color("#2d7a3a");
-      tip = new THREE.Color("#5cc46a");
+      baseHex = "#1f5a2a";
+      tipHex = "#69c674";
     }
-    return { base, tip };
+    return makeBladeTexture(tipHex, baseHex);
   }, [health]);
 
   useFrame((state) => {
@@ -133,78 +304,116 @@ function Terrain({
       scenario === "drought"
         ? "#d9b27a"
         : scenario === "frost"
-          ? "#b8d8e8"
+          ? "#cfe1ec"
           : scenario === "heatwave"
             ? "#e8a87c"
             : scenario === "heavy_rain"
-              ? "#6a7886"
-              : "#bcd9b0",
-      22,
-      55,
+              ? "#5a6470"
+              : "#bcd0b8",
+      28,
+      90,
     );
   });
 
   return (
     <group>
-      {/* Terrain */}
-      <mesh ref={meshRef} geometry={geometry} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      {/* Surrounding ground plane so field doesn't look like a floating slab */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} receiveShadow>
+        <planeGeometry args={[SIZE * 8, SIZE * 8]} />
+        <meshStandardMaterial color="#3d4a32" roughness={0.95} />
+      </mesh>
+
+      {/* Hero terrain */}
+      <mesh
+        ref={meshRef}
+        geometry={geometry}
+        rotation={[-Math.PI / 2, 0, 0]}
+        receiveShadow
+        castShadow
+      >
         {settings.heatmap ? (
-          <meshStandardMaterial vertexColors roughness={0.85} metalness={0.05} wireframe={settings.wireframe} />
-        ) : (
           <meshStandardMaterial
-            color={effectiveSoilColor}
-            roughness={0.92 - ((soilMoisture ?? 50) / 100) * 0.4}
+            vertexColors
+            roughness={0.85}
             metalness={0.02}
             wireframe={settings.wireframe}
+          />
+        ) : (
+          <meshStandardMaterial
+            map={albedo}
+            normalMap={normal}
+            normalScale={new THREE.Vector2(1.4, 1.4)}
+            roughness={0.92 - wet * 0.45}
+            metalness={0.02}
+            wireframe={settings.wireframe}
+            envMapIntensity={0.55}
           />
         )}
       </mesh>
 
-      {/* Subtle water sheen overlay when very wet */}
-      {(soilMoisture ?? 0) > 70 && !settings.wireframe && (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, 0]}>
+      {/* Wet sheen */}
+      {wet > 0.7 && !settings.wireframe && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, 0]}>
           <planeGeometry args={[SIZE * 0.98, SIZE * 0.98]} />
-          <meshStandardMaterial
-            color="#3a6e8a"
+          <meshPhysicalMaterial
+            color="#2c4e63"
             transparent
-            opacity={0.18}
-            roughness={0.15}
-            metalness={0.6}
+            opacity={0.22}
+            roughness={0.08}
+            metalness={0.0}
+            transmission={0.3}
+            clearcoat={0.6}
+            clearcoatRoughness={0.1}
           />
         </mesh>
       )}
 
-      {/* Crops — two-layer bush for depth */}
-      {settings.showCrops &&
-        cropPositions.map((p, i) => (
-          <group key={i} position={[p.x, p.y, p.z]}>
-            <mesh position={[0, 0.18 * p.scale, 0]} castShadow>
-              <coneGeometry args={[0.09 * p.scale, 0.36 * p.scale, 6]} />
-              <meshStandardMaterial color={cropColors.base} roughness={0.75} />
-            </mesh>
-            <mesh position={[0, 0.42 * p.scale, 0]} castShadow>
-              <sphereGeometry args={[0.13 * p.scale, 8, 6]} />
-              <meshStandardMaterial color={cropColors.tip} roughness={0.6} />
-            </mesh>
-          </group>
-        ))}
+      {/* Crop billboards — dual cross-plane for volume */}
+      {settings.showCrops && (
+        <group>
+          {cropData.map((p, i) => (
+            <group key={i} position={[p.x, p.y, p.z]} rotation={[0, p.rot, 0]} scale={p.scale}>
+              <mesh castShadow>
+                <planeGeometry args={[0.5, 0.55]} />
+                <meshStandardMaterial
+                  map={cropTex}
+                  transparent
+                  alphaTest={0.35}
+                  side={THREE.DoubleSide}
+                  roughness={0.85}
+                />
+              </mesh>
+              <mesh rotation={[0, Math.PI / 2, 0]} castShadow>
+                <planeGeometry args={[0.5, 0.55]} />
+                <meshStandardMaterial
+                  map={cropTex}
+                  transparent
+                  alphaTest={0.35}
+                  side={THREE.DoubleSide}
+                  roughness={0.85}
+                />
+              </mesh>
+            </group>
+          ))}
+        </group>
+      )}
 
       {/* Rain */}
       {settings.showRain &&
         scenario === "heavy_rain" &&
-        Array.from({ length: 110 }).map((_, i) => <RainDrop key={i} />)}
+        Array.from({ length: 220 }).map((_, i) => <RainDrop key={i} />)}
 
       {/* Frost speckles */}
       {scenario === "frost" &&
-        Array.from({ length: 40 }).map((_, i) => <FrostFleck key={i} />)}
+        Array.from({ length: 60 }).map((_, i) => <FrostFleck key={i} />)}
 
       {/* Sprinklers */}
       {settings.showSprinklers && irrigationLevel > 30 && (
         <>
-          <Sprinkler position={[-2.2, 0, -2.2]} intensity={irrigationLevel / 100} />
-          <Sprinkler position={[2.2, 0, 2.2]} intensity={irrigationLevel / 100} />
-          <Sprinkler position={[-2.2, 0, 2.2]} intensity={irrigationLevel / 100} />
-          <Sprinkler position={[2.2, 0, -2.2]} intensity={irrigationLevel / 100} />
+          <Sprinkler position={[-3, 0, -3]} intensity={irrigationLevel / 100} />
+          <Sprinkler position={[3, 0, 3]} intensity={irrigationLevel / 100} />
+          <Sprinkler position={[-3, 0, 3]} intensity={irrigationLevel / 100} />
+          <Sprinkler position={[3, 0, -3]} intensity={irrigationLevel / 100} />
         </>
       )}
     </group>
@@ -217,8 +426,8 @@ function RainDrop() {
     () => ({
       x: (Math.random() - 0.5) * SIZE,
       z: (Math.random() - 0.5) * SIZE,
-      y: 6 + Math.random() * 4,
-      speed: 0.18 + Math.random() * 0.12,
+      y: 8 + Math.random() * 6,
+      speed: 0.22 + Math.random() * 0.18,
     }),
     [],
   );
@@ -229,19 +438,20 @@ function RainDrop() {
   });
   return (
     <mesh ref={ref} position={[start.x, start.y, start.z]}>
-      <cylinderGeometry args={[0.012, 0.012, 0.25, 4]} />
-      <meshBasicMaterial color="#a8d8ee" transparent opacity={0.75} />
+      <cylinderGeometry args={[0.008, 0.008, 0.32, 4]} />
+      <meshBasicMaterial color="#bfe2f0" transparent opacity={0.7} />
     </mesh>
   );
 }
 
 function FrostFleck() {
   const pos = useMemo(
-    () => [
-      (Math.random() - 0.5) * SIZE * 0.95,
-      0.02,
-      (Math.random() - 0.5) * SIZE * 0.95,
-    ] as [number, number, number],
+    () =>
+      [
+        (Math.random() - 0.5) * SIZE * 0.95,
+        0.025,
+        (Math.random() - 0.5) * SIZE * 0.95,
+      ] as [number, number, number],
     [],
   );
   return (
@@ -252,27 +462,43 @@ function FrostFleck() {
   );
 }
 
-function Sprinkler({ position, intensity }: { position: [number, number, number]; intensity: number }) {
+function Sprinkler({
+  position,
+  intensity,
+}: {
+  position: [number, number, number];
+  intensity: number;
+}) {
   const groupRef = useRef<THREE.Group>(null);
   useFrame((state) => {
     if (groupRef.current) groupRef.current.rotation.y = state.clock.elapsedTime * 2;
   });
   return (
     <group position={position}>
-      <mesh position={[0, 0.4, 0]} castShadow>
-        <cylinderGeometry args={[0.05, 0.07, 0.8, 8]} />
-        <meshStandardMaterial color="#999" metalness={0.4} roughness={0.5} />
+      <mesh position={[0, 0.45, 0]} castShadow>
+        <cylinderGeometry args={[0.04, 0.06, 0.9, 12]} />
+        <meshStandardMaterial color="#888" metalness={0.7} roughness={0.35} />
       </mesh>
-      <group ref={groupRef} position={[0, 0.85, 0]}>
-        {Array.from({ length: 8 }).map((_, i) => {
-          const a = (i / 8) * Math.PI * 2;
+      <mesh position={[0, 0.95, 0]} castShadow>
+        <sphereGeometry args={[0.08, 12, 10]} />
+        <meshStandardMaterial color="#666" metalness={0.6} roughness={0.4} />
+      </mesh>
+      <group ref={groupRef} position={[0, 0.95, 0]}>
+        {Array.from({ length: 10 }).map((_, i) => {
+          const a = (i / 10) * Math.PI * 2;
           return (
             <mesh
               key={i}
-              position={[Math.cos(a) * 0.7 * intensity, 0, Math.sin(a) * 0.7 * intensity]}
+              position={[Math.cos(a) * 0.85 * intensity, -0.05, Math.sin(a) * 0.85 * intensity]}
             >
-              <sphereGeometry args={[0.045, 6, 6]} />
-              <meshBasicMaterial color="#7fd0ff" transparent opacity={0.85} />
+              <sphereGeometry args={[0.035, 6, 6]} />
+              <meshStandardMaterial
+                color="#9ddcff"
+                transparent
+                opacity={0.85}
+                emissive="#3aa0d8"
+                emissiveIntensity={0.3}
+              />
             </mesh>
           );
         })}
@@ -281,34 +507,37 @@ function Sprinkler({ position, intensity }: { position: [number, number, number]
   );
 }
 
-function SunRig({ angle, height, scenario }: { angle: number; height: number; scenario: Props["scenario"] }) {
+function SunRig({
+  angle,
+  height,
+  scenario,
+}: {
+  angle: number;
+  height: number;
+  scenario: Props["scenario"];
+}) {
   const rad = (angle * Math.PI) / 180;
-  const r = 14;
+  const r = 18;
   const x = Math.cos(rad) * r;
   const z = Math.sin(rad) * r;
-  const y = 4 + height * 16;
-  const dim = scenario === "heavy_rain" || scenario === "frost" ? 0.55 : 1.2;
-  const sunColor = scenario === "heatwave" ? "#ffb070" : scenario === "frost" ? "#dfeaf2" : "#fff4d6";
+  const y = 5 + height * 20;
+  const dim = scenario === "heavy_rain" || scenario === "frost" ? 1.2 : 2.6;
+  const sunColor =
+    scenario === "heatwave" ? "#ffb070" : scenario === "frost" ? "#dfeaf2" : "#fff2cc";
   return (
-    <>
-      <directionalLight
-        position={[x, y, z]}
-        intensity={dim}
-        castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
-        shadow-camera-left={-10}
-        shadow-camera-right={10}
-        shadow-camera-top={10}
-        shadow-camera-bottom={-10}
-        color={sunColor}
-      />
-      {/* Visible sun disc */}
-      <mesh position={[x * 0.7, y * 0.7, z * 0.7]}>
-        <sphereGeometry args={[0.55, 16, 16]} />
-        <meshBasicMaterial color={sunColor} />
-      </mesh>
-    </>
+    <directionalLight
+      position={[x, y, z]}
+      intensity={dim}
+      castShadow
+      shadow-mapSize-width={2048}
+      shadow-mapSize-height={2048}
+      shadow-camera-left={-14}
+      shadow-camera-right={14}
+      shadow-camera-top={14}
+      shadow-camera-bottom={-14}
+      shadow-bias={-0.0003}
+      color={sunColor}
+    />
   );
 }
 
@@ -332,14 +561,15 @@ function ControlsResettable({ resetKey, autoRotate }: { resetKey: number; autoRo
   return (
     <OrbitControls
       key={resetKey}
-      enablePan={true}
-      minDistance={4}
-      maxDistance={30}
+      enablePan
+      minDistance={5}
+      maxDistance={40}
       maxPolarAngle={Math.PI / 2.05}
       autoRotate={autoRotate}
-      autoRotateSpeed={0.6}
+      autoRotateSpeed={0.4}
       enableDamping
       dampingFactor={0.08}
+      target={[0, 0.5, 0]}
     />
   );
 }
@@ -352,7 +582,7 @@ export const DigitalTwin3D = (props: Props) => {
   const [panelOpen, setPanelOpen] = useState(true);
 
   const [settings, setSettings] = useState<ViewerSettings>({
-    exaggeration: 1.8,
+    exaggeration: 1.6,
     showCrops: true,
     showRain: true,
     showSprinklers: true,
@@ -362,29 +592,28 @@ export const DigitalTwin3D = (props: Props) => {
     autoRotate: false,
     showClouds: true,
     showSky: true,
-    sunAngle: 45,
+    sunAngle: 55,
     sunHeight: 0.55,
   });
 
-  // Sky params per scenario
   const skyParams = useMemo(() => {
     switch (props.scenario) {
       case "drought":
-        return { turbidity: 9, rayleigh: 1.5, mieCoefficient: 0.02, mieDirectionalG: 0.85, inclination: 0.48 };
+        return { turbidity: 9, rayleigh: 1.5, mieCoefficient: 0.02, mieDirectionalG: 0.85 };
       case "heatwave":
-        return { turbidity: 12, rayleigh: 2, mieCoefficient: 0.025, mieDirectionalG: 0.9, inclination: 0.5 };
+        return { turbidity: 12, rayleigh: 2, mieCoefficient: 0.025, mieDirectionalG: 0.9 };
       case "heavy_rain":
-        return { turbidity: 18, rayleigh: 0.5, mieCoefficient: 0.005, mieDirectionalG: 0.7, inclination: 0.45 };
+        return { turbidity: 18, rayleigh: 0.5, mieCoefficient: 0.005, mieDirectionalG: 0.7 };
       case "frost":
-        return { turbidity: 6, rayleigh: 1, mieCoefficient: 0.01, mieDirectionalG: 0.7, inclination: 0.4 };
+        return { turbidity: 6, rayleigh: 1, mieCoefficient: 0.01, mieDirectionalG: 0.7 };
       default:
-        return { turbidity: 5, rayleigh: 1.2, mieCoefficient: 0.005, mieDirectionalG: 0.8, inclination: 0.5 };
+        return { turbidity: 4, rayleigh: 1.4, mieCoefficient: 0.005, mieDirectionalG: 0.85 };
     }
   }, [props.scenario]);
 
   const sunPos = useMemo<[number, number, number]>(() => {
     const rad = (settings.sunAngle * Math.PI) / 180;
-    return [Math.cos(rad) * 100, 20 + settings.sunHeight * 80, Math.sin(rad) * 100];
+    return [Math.cos(rad) * 100, 25 + settings.sunHeight * 80, Math.sin(rad) * 100];
   }, [settings.sunAngle, settings.sunHeight]);
 
   useEffect(() => {
@@ -405,20 +634,26 @@ export const DigitalTwin3D = (props: Props) => {
   return (
     <div
       ref={containerRef}
-      className={`relative w-full ${fullscreen ? "h-screen" : "h-[480px]"} rounded-xl overflow-hidden border border-border bg-card shadow-elegant`}
+      className={`relative w-full ${fullscreen ? "h-screen" : "h-[520px]"} rounded-xl overflow-hidden border border-border bg-card shadow-elegant`}
     >
       <Canvas
         shadows
-        camera={{ position: [10, 8, 10], fov: 42 }}
-        gl={{ preserveDrawingBuffer: true, antialias: true }}
+        camera={{ position: [12, 8, 12], fov: 38 }}
+        gl={{
+          preserveDrawingBuffer: true,
+          antialias: true,
+          toneMapping: THREE.ACESFilmicToneMapping,
+          toneMappingExposure: 1.05,
+          outputColorSpace: THREE.SRGBColorSpace,
+        }}
         dpr={[1, 2]}
       >
+        <SoftShadows size={28} samples={16} focus={0.6} />
+
         {settings.showSky ? (
           <Sky
             distance={450000}
             sunPosition={sunPos}
-            inclination={skyParams.inclination}
-            azimuth={0.25}
             turbidity={skyParams.turbidity}
             rayleigh={skyParams.rayleigh}
             mieCoefficient={skyParams.mieCoefficient}
@@ -428,30 +663,41 @@ export const DigitalTwin3D = (props: Props) => {
           <color attach="background" args={["#1a1f1a"]} />
         )}
 
-        <Environment preset={props.scenario === "heavy_rain" ? "city" : props.scenario === "frost" ? "dawn" : "park"} />
+        <Environment
+          preset={
+            props.scenario === "heavy_rain"
+              ? "city"
+              : props.scenario === "frost"
+                ? "dawn"
+                : props.scenario === "heatwave"
+                  ? "sunset"
+                  : "park"
+          }
+          background={false}
+        />
 
-        <ambientLight intensity={props.scenario === "heavy_rain" ? 0.4 : 0.55} />
+        <hemisphereLight args={["#cfe7ff", "#3a3220", 0.55]} />
         <SunRig angle={settings.sunAngle} height={settings.sunHeight} scenario={props.scenario} />
 
         {settings.showClouds && (
-          <Clouds material={THREE.MeshBasicMaterial} limit={20}>
+          <Clouds material={THREE.MeshBasicMaterial} limit={30}>
             <Cloud
-              segments={30}
-              bounds={[12, 2, 12]}
-              volume={6}
-              color={props.scenario === "heavy_rain" ? "#5a6470" : "#ffffff"}
-              opacity={props.scenario === "heavy_rain" ? 0.85 : 0.55}
-              position={[0, 9, 0]}
-              speed={0.2}
+              segments={40}
+              bounds={[16, 2.5, 16]}
+              volume={8}
+              color={props.scenario === "heavy_rain" ? "#4a525c" : "#ffffff"}
+              opacity={props.scenario === "heavy_rain" ? 0.95 : 0.6}
+              position={[0, 14, 0]}
+              speed={0.15}
             />
             <Cloud
-              segments={20}
-              bounds={[8, 1.5, 8]}
-              volume={4}
-              color={props.scenario === "heavy_rain" ? "#454e58" : "#f4f4f4"}
-              opacity={props.scenario === "heavy_rain" ? 0.75 : 0.4}
-              position={[6, 11, -4]}
-              speed={0.15}
+              segments={28}
+              bounds={[10, 2, 10]}
+              volume={5}
+              color={props.scenario === "heavy_rain" ? "#3a424c" : "#f4f4f4"}
+              opacity={props.scenario === "heavy_rain" ? 0.85 : 0.45}
+              position={[8, 16, -6]}
+              speed={0.1}
             />
           </Clouds>
         )}
@@ -460,10 +706,10 @@ export const DigitalTwin3D = (props: Props) => {
 
         <ContactShadows
           position={[0, 0.005, 0]}
-          opacity={0.45}
-          scale={SIZE * 1.3}
-          blur={2}
-          far={6}
+          opacity={0.55}
+          scale={SIZE * 1.4}
+          blur={2.4}
+          far={8}
           color="#000000"
         />
 
@@ -476,14 +722,32 @@ export const DigitalTwin3D = (props: Props) => {
             sectionSize={2}
             sectionThickness={1.2}
             sectionColor="#3fa34d"
-            fadeDistance={25}
-            position={[0, 0.01, 0]}
+            fadeDistance={28}
+            position={[0, 0.015, 0]}
             infiniteGrid={false}
           />
         )}
 
         <ControlsResettable resetKey={resetKey} autoRotate={settings.autoRotate} />
         <SceneCapture ref={captureRef} />
+
+        <EffectComposer multisampling={4}>
+          <SSAO
+            blendFunction={BlendFunction.MULTIPLY}
+            samples={16}
+            radius={0.08}
+            intensity={18}
+            luminanceInfluence={0.6}
+            worldDistanceThreshold={1}
+            worldDistanceFalloff={1}
+            worldProximityThreshold={1}
+            worldProximityFalloff={1}
+          />
+          <Bloom intensity={0.35} luminanceThreshold={0.85} luminanceSmoothing={0.2} mipmapBlur />
+          <BrightnessContrast brightness={0.0} contrast={0.06} />
+          <Vignette eskil={false} offset={0.2} darkness={0.55} />
+          <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
+        </EffectComposer>
       </Canvas>
 
       {/* Top-right action bar */}
