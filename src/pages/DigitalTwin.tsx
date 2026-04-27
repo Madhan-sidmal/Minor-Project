@@ -68,6 +68,11 @@ const DigitalTwin = ({ mode = "farmer" }: { mode?: "farmer" | "admin" }) => {
         if (data.cropGuess && CROPS.includes(data.cropGuess)) {
           setParams((p) => ({ ...p, crop: data.cropGuess }));
         }
+        // Seed field calibration from AI area estimate (assume square if no aspect known)
+        if (data.areaEstimateSqm && data.areaEstimateSqm > 4) {
+          const side = Math.round(Math.sqrt(data.areaEstimateSqm));
+          setCalibration((c) => ({ ...c, widthM: side, lengthM: side }));
+        }
         toast.success("Land analyzed!");
         // Auto-run baseline sim
         const out = simulate(data as LandData, params, soil);
