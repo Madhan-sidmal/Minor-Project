@@ -747,12 +747,12 @@ export const DigitalTwin3D = (props: Props) => {
           </Clouds>
         )}
 
-        <Terrain {...props} settings={settings} />
+        <Terrain {...props} settings={settings} sizeX={sizeX} sizeZ={sizeZ} />
 
         <ContactShadows
           position={[0, 0.005, 0]}
           opacity={0.55}
-          scale={SIZE * 1.4}
+          scale={span * 1.4}
           blur={2.4}
           far={8}
           color="#000000"
@@ -760,7 +760,7 @@ export const DigitalTwin3D = (props: Props) => {
 
         {settings.showGrid && (
           <Grid
-            args={[SIZE * 1.5, SIZE * 1.5]}
+            args={[span * 1.5, span * 1.5]}
             cellSize={0.5}
             cellThickness={0.6}
             cellColor="#6b7c6b"
