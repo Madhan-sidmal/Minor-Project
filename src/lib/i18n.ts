@@ -99,6 +99,25 @@ export interface Translations {
   increasing: string;
   decreasing: string;
   stable: string;
+
+  // Auth
+  signIn: string;
+  signUp: string;
+  signOut: string;
+  email: string;
+  password: string;
+  fullName: string;
+  farmName: string;
+  rememberMe: string;
+  continueWithGoogle: string;
+  noAccount: string;
+  haveAccount: string;
+  authWelcome: string;
+  authSubtitle: string;
+  signingIn: string;
+  creatingAccount: string;
+  orContinueWith: string;
+  loginRequired: string;
 }
 
 const en: Translations = {
@@ -166,6 +185,14 @@ const en: Translations = {
   decisionPath: "Decision Path",
   rSquared: "R² Score", slope: "Slope", avgForecast: "Avg Forecast",
   trend: "Trend", increasing: "Increasing", decreasing: "Decreasing", stable: "Stable",
+  signIn: "Sign In", signUp: "Sign Up", signOut: "Sign Out",
+  email: "Email", password: "Password", fullName: "Full Name", farmName: "Farm Name",
+  rememberMe: "Remember me", continueWithGoogle: "Continue with Google",
+  noAccount: "New here? Create an account", haveAccount: "Already have an account? Sign in",
+  authWelcome: "Welcome to your farm",
+  authSubtitle: "Sign in to access your smart irrigation dashboard",
+  signingIn: "Signing in…", creatingAccount: "Creating account…",
+  orContinueWith: "or continue with", loginRequired: "Please sign in to continue",
 };
 
 const hi: Translations = {
@@ -233,6 +260,14 @@ const hi: Translations = {
   decisionPath: "निर्णय पथ",
   rSquared: "R² स्कोर", slope: "ढलान", avgForecast: "औसत पूर्वानुमान",
   trend: "रुझान", increasing: "बढ़ रहा है", decreasing: "घट रहा है", stable: "स्थिर",
+  signIn: "साइन इन", signUp: "साइन अप", signOut: "साइन आउट",
+  email: "ईमेल", password: "पासवर्ड", fullName: "पूरा नाम", farmName: "खेत का नाम",
+  rememberMe: "मुझे याद रखें", continueWithGoogle: "Google से जारी रखें",
+  noAccount: "नए हैं? खाता बनाएं", haveAccount: "पहले से खाता है? साइन इन करें",
+  authWelcome: "आपके खेत में स्वागत है",
+  authSubtitle: "स्मार्ट सिंचाई डैशबोर्ड के लिए साइन इन करें",
+  signingIn: "साइन इन हो रहा है…", creatingAccount: "खाता बन रहा है…",
+  orContinueWith: "या जारी रखें", loginRequired: "कृपया जारी रखने के लिए साइन इन करें",
 };
 
 const kn: Translations = {
@@ -300,6 +335,14 @@ const kn: Translations = {
   decisionPath: "ನಿರ್ಧಾರ ಮಾರ್ಗ",
   rSquared: "R² ಸ್ಕೋರ್", slope: "ಇಳಿಜಾರು", avgForecast: "ಸರಾಸರಿ ಮುನ್ಸೂಚನೆ",
   trend: "ಪ್ರವೃತ್ತಿ", increasing: "ಹೆಚ್ಚುತ್ತಿದೆ", decreasing: "ಕಡಿಮೆಯಾಗುತ್ತಿದೆ", stable: "ಸ್ಥಿರ",
+  signIn: "ಸೈನ್ ಇನ್", signUp: "ಸೈನ್ ಅಪ್", signOut: "ಸೈನ್ ಔಟ್",
+  email: "ಇಮೇಲ್", password: "ಪಾಸ್‌ವರ್ಡ್", fullName: "ಪೂರ್ಣ ಹೆಸರು", farmName: "ಹೊಲದ ಹೆಸರು",
+  rememberMe: "ನನ್ನನ್ನು ನೆನಪಿಡಿ", continueWithGoogle: "Google ನೊಂದಿಗೆ ಮುಂದುವರಿಸಿ",
+  noAccount: "ಹೊಸಬರೇ? ಖಾತೆ ರಚಿಸಿ", haveAccount: "ಈಗಾಗಲೇ ಖಾತೆ ಇದೆಯೇ? ಸೈನ್ ಇನ್",
+  authWelcome: "ನಿಮ್ಮ ಹೊಲಕ್ಕೆ ಸ್ವಾಗತ",
+  authSubtitle: "ಸ್ಮಾರ್ಟ್ ನೀರಾವರಿ ಡ್ಯಾಶ್‌ಬೋರ್ಡ್‌ಗೆ ಸೈನ್ ಇನ್ ಮಾಡಿ",
+  signingIn: "ಸೈನ್ ಇನ್ ಆಗುತ್ತಿದೆ…", creatingAccount: "ಖಾತೆ ರಚಿಸಲಾಗುತ್ತಿದೆ…",
+  orContinueWith: "ಅಥವಾ ಮುಂದುವರಿಸಿ", loginRequired: "ದಯವಿಟ್ಟು ಮುಂದುವರಿಸಲು ಸೈನ್ ಇನ್ ಮಾಡಿ",
 };
 
 export const translations: Record<Language, Translations> = { en, hi, kn };
