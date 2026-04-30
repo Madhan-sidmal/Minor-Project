@@ -46,8 +46,8 @@ const AdminDashboard = () => {
   }, [autoRun, runPipeline]);
 
   return (
-    <div className="min-h-screen gradient-mesh">
-      <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
+    <div className="dashboard-bright min-h-screen">
+      <header className="border-b border-border bg-card/80 backdrop-blur-md sticky top-0 z-10">
         <div className="container flex items-center justify-between h-14 px-4">
           <div className="flex items-center gap-3">
             <button onClick={() => navigate("/")} className="text-muted-foreground hover:text-foreground transition-colors">

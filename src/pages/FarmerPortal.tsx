@@ -51,7 +51,7 @@ const FarmerPortal = () => {
   };
 
   if (!result) return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="dashboard-bright min-h-screen flex items-center justify-center">
       <RefreshCw className="h-8 w-8 text-primary animate-spin" />
     </div>
   );
@@ -67,9 +67,9 @@ const FarmerPortal = () => {
   const tips = [t.tip1, t.tip2, t.tip3, t.tip4];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="dashboard-bright min-h-screen">
       {/* Header */}
-      <header className="bg-card border-b border-border px-4 py-3 sticky top-0 z-10">
+      <header className="bg-card/80 backdrop-blur-md border-b border-border px-4 py-3 sticky top-0 z-10">
         <div className="flex items-center justify-between">
           <button onClick={() => navigate("/")} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="h-4 w-4" />
