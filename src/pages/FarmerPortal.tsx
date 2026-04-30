@@ -225,15 +225,15 @@ const FarmerPortal = () => {
               <AreaChart data={forecastData}>
                 <defs>
                   <linearGradient id="farmerForecast" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(142, 60%, 45%)" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="hsl(142, 60%, 45%)" stopOpacity={0} />
+                    <stop offset="5%" stopColor="hsl(var(--accent))" stopOpacity={0.4} />
+                    <stop offset="95%" stopColor="hsl(var(--accent))" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(150, 12%, 18%)" />
-                <XAxis dataKey="day" tick={{ fontSize: 9, fill: "hsl(120, 8%, 55%)" }} tickLine={false} axisLine={false} />
-                <YAxis tick={{ fontSize: 9, fill: "hsl(120, 8%, 55%)" }} tickLine={false} axisLine={false} />
-                <Tooltip contentStyle={{ backgroundColor: "hsl(150, 18%, 10%)", border: "1px solid hsl(150, 12%, 18%)", borderRadius: "8px", fontSize: "12px" }} />
-                <Area type="monotone" dataKey="value" stroke="hsl(142, 60%, 45%)" fill="url(#farmerForecast)" strokeWidth={2} />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="day" tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} />
+                <YAxis tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} />
+                <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px", color: "hsl(var(--foreground))" }} />
+                <Area type="monotone" dataKey="value" stroke="hsl(var(--accent))" fill="url(#farmerForecast)" strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
           </div>

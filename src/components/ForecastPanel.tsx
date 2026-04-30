@@ -53,27 +53,28 @@ export function ForecastPanel({ result, historicalUsage }: Props) {
           <AreaChart data={chartData}>
             <defs>
               <linearGradient id="actualGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(142, 60%, 45%)" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="hsl(142, 60%, 45%)" stopOpacity={0} />
+                <stop offset="5%" stopColor="hsl(var(--accent))" stopOpacity={0.35} />
+                <stop offset="95%" stopColor="hsl(var(--accent))" stopOpacity={0} />
               </linearGradient>
               <linearGradient id="predictGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(38, 80%, 55%)" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="hsl(38, 80%, 55%)" stopOpacity={0} />
+                <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.35} />
+                <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(150, 12%, 18%)" />
-            <XAxis dataKey="label" tick={{ fontSize: 10, fill: "hsl(120, 8%, 55%)" }} tickLine={false} axisLine={false} />
-            <YAxis tick={{ fontSize: 10, fill: "hsl(120, 8%, 55%)" }} tickLine={false} axisLine={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+            <XAxis dataKey="label" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} />
+            <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} />
             <Tooltip
               contentStyle={{
-                backgroundColor: "hsl(150, 18%, 10%)",
-                border: "1px solid hsl(150, 12%, 18%)",
+                backgroundColor: "hsl(var(--card))",
+                border: "1px solid hsl(var(--border))",
                 borderRadius: "8px",
                 fontSize: "12px",
+                color: "hsl(var(--foreground))",
               }}
             />
-            <Area type="monotone" dataKey="actual" stroke="hsl(142, 60%, 45%)" fill="url(#actualGrad)" strokeWidth={2} connectNulls={false} />
-            <Area type="monotone" dataKey="predicted" stroke="hsl(38, 80%, 55%)" fill="url(#predictGrad)" strokeWidth={2} strokeDasharray="5 5" connectNulls={false} />
+            <Area type="monotone" dataKey="actual" stroke="hsl(var(--accent))" fill="url(#actualGrad)" strokeWidth={2} connectNulls={false} />
+            <Area type="monotone" dataKey="predicted" stroke="hsl(var(--primary))" fill="url(#predictGrad)" strokeWidth={2} strokeDasharray="5 5" connectNulls={false} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
